@@ -9,9 +9,18 @@ const viewsRouter = require('./routes/views');
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer);
+const mongoose = require('mongoose');
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Conectar a MongoDB
+mongoose.connect('mongodb://localhost:27017/ecommerce', {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+})
+.then(() => console.log('Conectado a MongoDB'))
+.catch(err => console.error('Error al conectar a MongoDB', err));
 
 // Configuración del motor de plantillas Handlebars
 app.engine('handlebars', handlebars.engine());

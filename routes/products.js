@@ -1,56 +1,48 @@
 const express = require('express');
-const fs = require('fs');
-const io = require('../server'); // Importamos la instancia de Socket.io
-
 const router = express.Router();
-const productsFilePath = './data/productos.json';
-const { readProducts, saveProducts, generateId } = require('../utils/fileManager'); // Utilidades para manejar archivos
+const Product = require('../models/product'); // Modelo de Producto
 
-// Ruta POST para agregar un nuevo producto
-router.post('/', (req, res) => {
-    const { title, description, code, price, stock, category, thumbnails } = req.body;
+router.get('/', async (req, res) => {
+    try {
+        const { limit = 10, page = 1, sort, query } = req.query;
 
-    if (!title || !description || !code || !price || !stock || !category) {
-        return res.status(400).json({ error: 'Todos los campos son obligatorios, excepto thumbnails' });
+        // Filtro por categoría o disponibilidad
+        let filter = {};
+        if (query) {
+            if (query === 'category') {
+                filter = { category: req.query.category };
+            } else if (query === 'status') {
+                filter = { status: req.query.status === 'true' };
+            }
+        }
+
+        // Configuración de opciones de paginación
+        const options = {
+            limit: parseInt(limit),
+            page: parseInt(page),
+            sort: sort ? { price: sort === 'asc' ? 1 : -1 } : {},
+        };
+
+        const products = await Product.paginate(filter, options);
+
+        // Creando el objeto de respuesta
+        const response = {
+            status: "success",
+            payload: products.docs, // resultados de productos
+            totalPages: products.totalPages,
+            prevPage: products.prevPage,
+            nextPage: products.nextPage,
+            page: products.page,
+            hasPrevPage: products.hasPrevPage,
+            hasNextPage: products.hasNextPage,
+            prevLink: products.hasPrevPage ? `/api/products?page=${products.prevPage}&limit=${limit}` : null,
+            nextLink: products.hasNextPage ? `/api/products?page=${products.nextPage}&limit=${limit}` : null
+        };
+
+        res.json(response);
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
     }
-
-    const newProduct = {
-        id: generateId(),
-        title,
-        description,
-        code,
-        price,
-        status: true,
-        stock,
-        category,
-        thumbnails: thumbnails || []
-    };
-
-    const products = readProducts();
-    products.push(newProduct);
-    saveProducts(products);
-
-    io.emit('new-product', newProduct); // Emitir nuevo producto vía websockets
-
-    res.status(201).json(newProduct);
-});
-
-// Ruta DELETE para eliminar un producto por ID
-router.delete('/:pid', (req, res) => {
-    const { pid } = req.params;
-    let products = readProducts();
-    const productIndex = products.findIndex(p => p.id == pid);
-
-    if (productIndex === -1) {
-        return res.status(404).json({ error: 'Producto no encontrado' });
-    }
-
-    products = products.filter(p => p.id != pid);
-    saveProducts(products);
-
-    io.emit('delete-product', pid); // Emitir evento de producto eliminado vía websockets
-
-    res.json({ message: 'Producto eliminado' });
 });
 
 module.exports = router;
